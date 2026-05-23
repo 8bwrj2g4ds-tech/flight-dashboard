@@ -43,8 +43,8 @@ HEADLESS_MODE = True
 PRICE_HISTORY_FILE = "best_price_history.json"
 CSV_FILE = "flight_results.csv"
 
-TELEGRAM_BOT_TOKEN = "8911409301:AAEXOf50sAFo-E8mfdXajYTxnEYOxYEGl7w"
-TELEGRAM_CHAT_ID = "5095590388"
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 
 # =========================
