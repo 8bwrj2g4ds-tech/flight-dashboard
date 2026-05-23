@@ -1,0 +1,16 @@
+
+Opening Google Flights...
+Route: MEX → CDG
+Dates: 2026-09-15 to 2026-09-25
+Cabin: economy
+Found prices: [17099, 17099, 17132, 18874, 17479, 17489, 17489, 17489, 17489, 17505, 19252, 19365, 25410]
+Lowest detected price: 17099
+Price is good, but not lower than previous alert
+
+Opening Google Flights...
+Route: MEX → CDG
+Dates: 2026-10-10 to 2026-10-20
+Cabin: economy
+Found prices: [13854, 13854, 16187, 16643, 16643, 17056, 17056, 19327, 21168]
+Lowest detected price: 13854
+Price is good, but not lower than previous alert
