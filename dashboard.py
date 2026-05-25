@@ -24,6 +24,12 @@ df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
 df["lowest_price_mxn"] = pd.to_numeric(df["lowest_price_mxn"], errors="coerce")
 df["trip_length_days"] = pd.to_numeric(df["trip_length_days"], errors="coerce")
 
+latest_scan_time = df["timestamp"].max()
+
+formatted_scan_time = latest_scan_time.strftime("%B %d, %Y %H:%M")
+
+st.info(f"🕒 Last scanner update: {formatted_scan_time}")
+
 st.sidebar.header("Filters")
 
 origins = st.sidebar.multiselect(
