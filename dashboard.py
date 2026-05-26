@@ -131,7 +131,7 @@ def deal_score(row):
     ]
 
     solid_airlines = [
-        "Aeromexico", "United", "American", "Air Europa"
+        "Aeromexico", "United", "American", "Air Europa", "Avianca"
     ]
 
     low_cost_airlines = [
