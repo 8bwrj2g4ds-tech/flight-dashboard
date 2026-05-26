@@ -26,9 +26,16 @@ df["trip_length_days"] = pd.to_numeric(df["trip_length_days"], errors="coerce")
 
 latest_scan_time = df["timestamp"].max()
 
-formatted_scan_time = latest_scan_time.strftime("%B %d, %Y %H:%M")
+import pytz
 
-st.info(f"🕒 Last scanner update: {formatted_scan_time}")
+utc_time = latest_scan_time.tz_localize("UTC")
+
+mx_time = utc_time.tz_convert("America/Mexico_City")
+
+st.info(
+    f"🕒 Last scanner update: "
+    f"{mx_time.strftime('%B %d, %Y %H:%M')} (Mexico City)"
+)
 
 st.sidebar.header("Filters")
 
