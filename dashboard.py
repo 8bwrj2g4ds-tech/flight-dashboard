@@ -28,7 +28,10 @@ latest_scan_time = df["timestamp"].max()
 
 import pytz
 
-utc_time = latest_scan_time.tz_localize("UTC")
+if latest_scan_time.tzinfo is None:
+    utc_time = latest_scan_time.tz_localize("UTC")
+else:
+    utc_time = latest_scan_time
 
 mx_time = utc_time.tz_convert("America/Mexico_City")
 
@@ -270,7 +273,103 @@ st.subheader("🔮 Predictive Price Trends")
 
 st.dataframe(
     trend_table,
-    width="stretch"
+    use_container_width=True
+)
+
+st.subheader("📈 Historical Price Intelligence")
+
+historical_data = filtered.copy()
+
+historical_data["route"] = (
+    historical_data["origin"] + " → " + historical_data["destination"]
+)
+
+historical_data = historical_data.sort_values("timestamp")
+
+latest_prices = (
+    historical_data
+    .groupby(["origin", "destination", "cabin_class", "stops"])
+    .tail(1)
+)
+
+historical_summary = (
+    historical_data
+    .groupby(["origin", "destination", "cabin_class", "stops"])
+    .agg(
+        lowest_ever_mxn=("lowest_price_mxn", "min"),
+        average_price_mxn=("lowest_price_mxn", "mean"),
+        highest_price_mxn=("lowest_price_mxn", "max"),
+        observations=("lowest_price_mxn", "count")
+    )
+    .reset_index()
+)
+
+historical_table = latest_prices.merge(
+    historical_summary,
+    on=["origin", "destination", "cabin_class", "stops"],
+    how="left"
+)
+
+historical_table["delta_vs_average_pct"] = (
+    (historical_table["lowest_price_mxn"] - historical_table["average_price_mxn"])
+    / historical_table["average_price_mxn"]
+    * 100
+)
+
+def historical_signal(row):
+    delta = row["delta_vs_average_pct"]
+    latest = row["lowest_price_mxn"]
+    lowest = row["lowest_ever_mxn"]
+
+    if row["observations"] < 3:
+        return "Not enough history"
+
+    if latest <= lowest * 1.03:
+        return "🔥 Buy now - near lowest ever"
+
+    if delta <= -15:
+        return "✅ Good deal - below average"
+
+    if delta >= 10:
+        return "⏳ Wait - above average"
+
+    return "Stable"
+
+historical_table["historical_signal"] = historical_table.apply(
+    historical_signal,
+    axis=1
+)
+
+historical_display = historical_table[
+    [
+        "origin",
+        "destination",
+        "cabin_class",
+        "stops",
+        "lowest_price_mxn",
+        "lowest_ever_mxn",
+        "average_price_mxn",
+        "highest_price_mxn",
+        "delta_vs_average_pct",
+        "observations",
+        "historical_signal",
+        "departure_date",
+        "return_date",
+        "airline",
+        "duration",
+        "url"
+    ]
+].copy()
+
+historical_display["lowest_price_mxn"] = historical_display["lowest_price_mxn"].round(0)
+historical_display["lowest_ever_mxn"] = historical_display["lowest_ever_mxn"].round(0)
+historical_display["average_price_mxn"] = historical_display["average_price_mxn"].round(0)
+historical_display["highest_price_mxn"] = historical_display["highest_price_mxn"].round(0)
+historical_display["delta_vs_average_pct"] = historical_display["delta_vs_average_pct"].round(1)
+
+st.dataframe(
+    historical_display.sort_values("delta_vs_average_pct"),
+    use_container_width=True
 )
 
 st.subheader("🔥 Heat Map View")
@@ -290,9 +389,8 @@ heatmap_pivot = heatmap_data.pivot_table(
 
 st.dataframe(
     heatmap_pivot,
-    width="stretch"
+    use_container_width=True
 )
-
 
 st.subheader("📌 Summary")
 
@@ -420,7 +518,7 @@ price_trend_chart = px.line(
     title="Price Trend Over Time"
 )
 
-st.plotly_chart(price_trend_chart, width="stretch")
+st.plotly_chart(price_trend_chart, use_container_width=True)
 
 
 st.subheader("✈️ Interactive Airline Comparison")
@@ -442,7 +540,7 @@ airline_chart = px.bar(
     text_auto=True
 )
 
-st.plotly_chart(airline_chart, width="stretch")
+st.plotly_chart(airline_chart, use_container_width=True)
 
 
 st.subheader("🛑 Interactive Stop Comparison")
@@ -464,8 +562,7 @@ stop_chart = px.bar(
     text_auto=True
 )
 
-st.plotly_chart(stop_chart, width="stretch")
-
+st.plotly_chart(stop_chart, use_container_width=True)
 
 st.subheader("📅 Cheapest Weekday to Depart")
 
@@ -509,7 +606,7 @@ weekday_chart = px.bar(
     text_auto=True
 )
 
-st.plotly_chart(weekday_chart, width="stretch")
+st.plotly_chart(weekday_chart, use_container_width=True)
 
 st.subheader("📄 Full Data")
 
