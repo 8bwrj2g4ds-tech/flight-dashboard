@@ -135,7 +135,7 @@ def deal_score(row):
     ]
 
     low_cost_airlines = [
-        "Volaris", "Viva Aerobus"
+        "Volaris", "Viva Aerobus", "WestJet"
     ]
 
     if airline in premium_airlines:
