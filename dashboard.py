@@ -5,6 +5,7 @@ import streamlit as st
 import plotly.express as px
 
 CSV_FILE = "flight_results.csv"
+AIRPORTS_FILE = "airports.dat"
 
 PREMIUM_AIRLINES = [
     "Air France", "KLM", "Lufthansa", "British Airways",
@@ -24,6 +25,27 @@ WEEKDAY_ORDER = [
     "Monday", "Tuesday", "Wednesday", "Thursday",
     "Friday", "Saturday", "Sunday"
 ]
+
+
+def load_airport_database():
+    columns = [
+        "airport_id", "name", "city", "country", "iata", "icao",
+        "lat", "lon", "altitude", "timezone", "dst", "tz_database",
+        "type", "source"
+    ]
+
+    airports = pd.read_csv(
+        AIRPORTS_FILE,
+        header=None,
+        names=columns,
+        na_values="\\N"
+    )
+
+    airports = airports.dropna(subset=["iata", "lat", "lon"])
+    airports = airports[airports["iata"].astype(str).str.len() == 3]
+
+    return airports[["iata", "name", "city", "country", "lat", "lon"]]
+
 
 st.set_page_config(page_title="Flight Deal Dashboard", layout="wide")
 
@@ -133,7 +155,6 @@ def historical_signal(row):
 
 
 historical_data = filtered.copy()
-historical_data["route"] = historical_data["origin"] + " → " + historical_data["destination"]
 historical_data = historical_data.sort_values("timestamp")
 
 latest_prices = (
@@ -378,7 +399,6 @@ col2.metric("Average Price", f"MX${filtered['lowest_price_mxn'].mean():,.0f}")
 col3.metric("Search Results", len(filtered))
 col4.metric("Destinations", filtered["destination"].nunique())
 
-
 st.subheader("🤖 AI Destination Finder")
 
 business_under_50k = filtered[
@@ -435,64 +455,58 @@ with col_c:
 
 st.subheader("🗺️ Destination Price Map")
 
-destination_coordinates = {
-    "NRT": {"city": "Tokyo", "lat": 35.7720, "lon": 140.3929},
-    "CDG": {"city": "Paris", "lat": 49.0097, "lon": 2.5479},
-    "MAD": {"city": "Madrid", "lat": 40.4983, "lon": -3.5676},
-    "AMS": {"city": "Amsterdam", "lat": 52.3105, "lon": 4.7683},
-    "EDI": {"city": "Edinburgh", "lat": 55.9500, "lon": -3.3725},
-    "DUB": {"city": "Dublin", "lat": 53.4213, "lon": -6.2701},
-    "FRA": {"city": "Frankfurt", "lat": 50.0379, "lon": 8.5622},
-    "FCO": {"city": "Rome", "lat": 41.8003, "lon": 12.2389}
-}
+if os.path.exists(AIRPORTS_FILE):
+    airports = load_airport_database()
 
-map_data = (
-    filtered
-    .groupby(["destination", "cabin_class"])["lowest_price_mxn"]
-    .min()
-    .reset_index()
-)
+    map_data = (
+        filtered
+        .groupby(["destination", "cabin_class"])["lowest_price_mxn"]
+        .min()
+        .reset_index()
+    )
 
-map_data["city"] = map_data["destination"].map(
-    lambda x: destination_coordinates.get(x, {}).get("city")
-)
+    map_data = map_data.merge(
+        airports,
+        left_on="destination",
+        right_on="iata",
+        how="left"
+    )
 
-map_data["lat"] = map_data["destination"].map(
-    lambda x: destination_coordinates.get(x, {}).get("lat")
-)
+    map_data = map_data.dropna(subset=["lat", "lon"])
 
-map_data["lon"] = map_data["destination"].map(
-    lambda x: destination_coordinates.get(x, {}).get("lon")
-)
+    if map_data.empty:
+        st.info("No airport coordinates found for the current destinations.")
+    else:
+        map_fig = px.scatter_geo(
+            map_data,
+            lat="lat",
+            lon="lon",
+            color="lowest_price_mxn",
+            size="lowest_price_mxn",
+            hover_name="city",
+            hover_data={
+                "destination": True,
+                "country": True,
+                "cabin_class": True,
+                "lowest_price_mxn": ":,.0f",
+                "lat": False,
+                "lon": False,
+                "iata": False
+            },
+            projection="natural earth",
+            title="Cheapest Destination Prices by Cabin"
+        )
 
-map_data = map_data.dropna(subset=["lat", "lon"])
+        map_fig.update_geos(
+            showcountries=True,
+            showcoastlines=True,
+            showland=True,
+            fitbounds="locations"
+        )
 
-map_fig = px.scatter_geo(
-    map_data,
-    lat="lat",
-    lon="lon",
-    color="lowest_price_mxn",
-    size="lowest_price_mxn",
-    hover_name="city",
-    hover_data={
-        "destination": True,
-        "cabin_class": True,
-        "lowest_price_mxn": ":,.0f",
-        "lat": False,
-        "lon": False
-    },
-    projection="natural earth",
-    title="Cheapest Destination Prices by Cabin"
-)
-
-map_fig.update_geos(
-    showcountries=True,
-    showcoastlines=True,
-    showland=True,
-    fitbounds="locations"
-)
-
-st.plotly_chart(map_fig, use_container_width=True)
+        st.plotly_chart(map_fig, use_container_width=True)
+else:
+    st.info("airports.dat not found. Add it to enable the destination map.")
 
 st.subheader("🏆 Top 15 Deals Ranked by AI Score")
 
