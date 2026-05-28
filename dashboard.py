@@ -535,19 +535,119 @@ st.dataframe(
     use_container_width=True
 )
 
-st.subheader("🔮 Predictive Price Trends")
+st.subheader("🔮 Predictive Pricing Intelligence")
 
-trend_table = (
+prediction_data = []
+
+grouped_predictions = (
     filtered
+    .sort_values("timestamp")
     .groupby(["origin", "destination", "cabin_class", "stops"])
-    .apply(price_trend_signal)
-    .reset_index(name="trend_signal")
 )
 
-st.dataframe(
-    trend_table,
-    use_container_width=True
-)
+for keys, group in grouped_predictions:
+
+    if len(group) < 3:
+        continue
+
+    group = group.sort_values("timestamp")
+
+    latest_price = group["lowest_price_mxn"].iloc[-1]
+    average_price = group["lowest_price_mxn"].mean()
+    lowest_price = group["lowest_price_mxn"].min()
+    highest_price = group["lowest_price_mxn"].max()
+
+    recent_group = group.tail(min(5, len(group)))
+    recent_average = recent_group["lowest_price_mxn"].mean()
+
+    volatility = group["lowest_price_mxn"].std()
+
+    if pd.isna(volatility):
+        volatility = 0
+
+    # Trend direction
+    first_recent = recent_group["lowest_price_mxn"].iloc[0]
+    last_recent = recent_group["lowest_price_mxn"].iloc[-1]
+
+    trend_pct = (
+        (last_recent - first_recent)
+        / first_recent
+        * 100
+    )
+
+    if trend_pct <= -5:
+        trend_direction = "📉 Falling"
+    elif trend_pct >= 5:
+        trend_direction = "📈 Rising"
+    else:
+        trend_direction = "➡️ Stable"
+
+    # Volatility label
+    if volatility <= 1500:
+        volatility_label = "Low"
+    elif volatility <= 5000:
+        volatility_label = "Medium"
+    else:
+        volatility_label = "High"
+
+    # Confidence
+    observations = len(group)
+
+    if observations >= 10 and volatility_label == "Low":
+        confidence = "High"
+    elif observations >= 5:
+        confidence = "Medium"
+    else:
+        confidence = "Low"
+
+    # Smart prediction signal
+    if (
+        latest_price <= lowest_price * 1.03
+        and trend_direction == "📉 Falling"
+    ):
+        prediction_signal = "🔥 Strong Buy"
+
+    elif latest_price < average_price * 0.90:
+        prediction_signal = "✅ Buy"
+
+    elif trend_direction == "📈 Rising":
+        prediction_signal = "⏳ Wait"
+
+    else:
+        prediction_signal = "👀 Watch"
+
+    prediction_data.append({
+        "origin": keys[0],
+        "destination": keys[1],
+        "cabin_class": keys[2],
+        "stops": keys[3],
+        "latest_price_mxn": round(latest_price, 0),
+        "historical_average_mxn": round(average_price, 0),
+        "lowest_ever_mxn": round(lowest_price, 0),
+        "highest_ever_mxn": round(highest_price, 0),
+        "recent_average_mxn": round(recent_average, 0),
+        "trend_direction": trend_direction,
+        "trend_change_pct": round(trend_pct, 1),
+        "volatility_mxn": round(volatility, 0),
+        "volatility_level": volatility_label,
+        "confidence": confidence,
+        "prediction_signal": prediction_signal,
+        "observations": observations
+    })
+
+prediction_df = pd.DataFrame(prediction_data)
+
+if prediction_df.empty:
+    st.info("Not enough historical data yet for predictive intelligence.")
+else:
+    prediction_df = prediction_df.sort_values(
+        ["prediction_signal", "trend_change_pct"]
+    )
+
+    st.dataframe(
+        prediction_df,
+        use_container_width=True
+    )
 
 st.subheader("📈 Historical Price Intelligence")
 
