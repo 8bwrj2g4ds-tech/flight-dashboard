@@ -692,8 +692,14 @@ heatmap_data = (
     .reset_index()
 )
 
+heatmap_data["route"] = (
+    heatmap_data["origin"]
+    + " → "
+    + heatmap_data["destination"]
+)
+
 heatmap_pivot = heatmap_data.pivot_table(
-    index=["origin", "destination"],
+    index="route",
     columns="cabin_class",
     values="lowest_price_mxn"
 )
