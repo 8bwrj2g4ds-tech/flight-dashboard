@@ -378,6 +378,61 @@ col2.metric("Average Price", f"MX${filtered['lowest_price_mxn'].mean():,.0f}")
 col3.metric("Search Results", len(filtered))
 col4.metric("Destinations", filtered["destination"].nunique())
 
+
+st.subheader("🤖 AI Destination Finder")
+
+business_under_50k = filtered[
+    (filtered["cabin_class"] == "business") &
+    (filtered["lowest_price_mxn"] <= 50000)
+].sort_values("lowest_price_mxn")
+
+nonstop_deals = filtered[
+    filtered["stops"] == "Nonstop"
+].sort_values("lowest_price_mxn")
+
+best_overall = filtered.sort_values("deal_score", ascending=False)
+
+col_a, col_b, col_c = st.columns(3)
+
+with col_a:
+    st.markdown("### 💼 Best Business Under MX$50k")
+    if business_under_50k.empty:
+        st.info("No business class deals under MX$50k found.")
+    else:
+        deal = business_under_50k.iloc[0]
+        st.success(
+            f"{deal['origin']} → {deal['destination']}\n\n"
+            f"MX${deal['lowest_price_mxn']:,.0f}\n\n"
+            f"{deal['departure_date']} to {deal['return_date']}\n\n"
+            f"{deal['airline']} | {deal['stops']} | {deal['duration']}"
+        )
+        st.link_button("Open Google Flights", deal["url"])
+
+with col_b:
+    st.markdown("### 🛫 Best Nonstop Deal")
+    if nonstop_deals.empty:
+        st.info("No nonstop deals found.")
+    else:
+        deal = nonstop_deals.iloc[0]
+        st.success(
+            f"{deal['origin']} → {deal['destination']}\n\n"
+            f"MX${deal['lowest_price_mxn']:,.0f}\n\n"
+            f"{deal['departure_date']} to {deal['return_date']}\n\n"
+            f"{deal['cabin_class'].title()} | {deal['airline']} | {deal['duration']}"
+        )
+        st.link_button("Open Google Flights", deal["url"])
+
+with col_c:
+    st.markdown("### 🏆 Best Overall Deal")
+    deal = best_overall.iloc[0]
+    st.success(
+        f"{deal['origin']} → {deal['destination']}\n\n"
+        f"Score: {deal['deal_score']}\n\n"
+        f"MX${deal['lowest_price_mxn']:,.0f}\n\n"
+        f"{deal['cabin_class'].title()} | {deal['airline']} | {deal['stops']}"
+    )
+    st.link_button("Open Google Flights", deal["url"])
+
 st.subheader("🗺️ Destination Price Map")
 
 destination_coordinates = {
@@ -438,60 +493,6 @@ map_fig.update_geos(
 )
 
 st.plotly_chart(map_fig, use_container_width=True)
-
-st.subheader("🤖 AI Destination Finder")
-
-business_under_50k = filtered[
-    (filtered["cabin_class"] == "business") &
-    (filtered["lowest_price_mxn"] <= 50000)
-].sort_values("lowest_price_mxn")
-
-nonstop_deals = filtered[
-    filtered["stops"] == "Nonstop"
-].sort_values("lowest_price_mxn")
-
-best_overall = filtered.sort_values("deal_score", ascending=False)
-
-col_a, col_b, col_c = st.columns(3)
-
-with col_a:
-    st.markdown("### 💼 Best Business Under MX$50k")
-    if business_under_50k.empty:
-        st.info("No business class deals under MX$50k found.")
-    else:
-        deal = business_under_50k.iloc[0]
-        st.success(
-            f"{deal['origin']} → {deal['destination']}\n\n"
-            f"MX${deal['lowest_price_mxn']:,.0f}\n\n"
-            f"{deal['departure_date']} to {deal['return_date']}\n\n"
-            f"{deal['airline']} | {deal['stops']} | {deal['duration']}"
-        )
-        st.link_button("Open Google Flights", deal["url"])
-
-with col_b:
-    st.markdown("### 🛫 Best Nonstop Deal")
-    if nonstop_deals.empty:
-        st.info("No nonstop deals found.")
-    else:
-        deal = nonstop_deals.iloc[0]
-        st.success(
-            f"{deal['origin']} → {deal['destination']}\n\n"
-            f"MX${deal['lowest_price_mxn']:,.0f}\n\n"
-            f"{deal['departure_date']} to {deal['return_date']}\n\n"
-            f"{deal['cabin_class'].title()} | {deal['airline']} | {deal['duration']}"
-        )
-        st.link_button("Open Google Flights", deal["url"])
-
-with col_c:
-    st.markdown("### 🏆 Best Overall Deal")
-    deal = best_overall.iloc[0]
-    st.success(
-        f"{deal['origin']} → {deal['destination']}\n\n"
-        f"Score: {deal['deal_score']}\n\n"
-        f"MX${deal['lowest_price_mxn']:,.0f}\n\n"
-        f"{deal['cabin_class'].title()} | {deal['airline']} | {deal['stops']}"
-    )
-    st.link_button("Open Google Flights", deal["url"])
 
 st.subheader("🏆 Top 15 Deals Ranked by AI Score")
 
