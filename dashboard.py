@@ -378,6 +378,67 @@ col2.metric("Average Price", f"MX${filtered['lowest_price_mxn'].mean():,.0f}")
 col3.metric("Search Results", len(filtered))
 col4.metric("Destinations", filtered["destination"].nunique())
 
+st.subheader("🗺️ Destination Price Map")
+
+destination_coordinates = {
+    "NRT": {"city": "Tokyo", "lat": 35.7720, "lon": 140.3929},
+    "CDG": {"city": "Paris", "lat": 49.0097, "lon": 2.5479},
+    "MAD": {"city": "Madrid", "lat": 40.4983, "lon": -3.5676},
+    "AMS": {"city": "Amsterdam", "lat": 52.3105, "lon": 4.7683},
+    "EDI": {"city": "Edinburgh", "lat": 55.9500, "lon": -3.3725},
+    "DUB": {"city": "Dublin", "lat": 53.4213, "lon": -6.2701},
+    "FRA": {"city": "Frankfurt", "lat": 50.0379, "lon": 8.5622},
+    "FCO": {"city": "Rome", "lat": 41.8003, "lon": 12.2389}
+}
+
+map_data = (
+    filtered
+    .groupby(["destination", "cabin_class"])["lowest_price_mxn"]
+    .min()
+    .reset_index()
+)
+
+map_data["city"] = map_data["destination"].map(
+    lambda x: destination_coordinates.get(x, {}).get("city")
+)
+
+map_data["lat"] = map_data["destination"].map(
+    lambda x: destination_coordinates.get(x, {}).get("lat")
+)
+
+map_data["lon"] = map_data["destination"].map(
+    lambda x: destination_coordinates.get(x, {}).get("lon")
+)
+
+map_data = map_data.dropna(subset=["lat", "lon"])
+
+map_fig = px.scatter_geo(
+    map_data,
+    lat="lat",
+    lon="lon",
+    color="lowest_price_mxn",
+    size="lowest_price_mxn",
+    hover_name="city",
+    hover_data={
+        "destination": True,
+        "cabin_class": True,
+        "lowest_price_mxn": ":,.0f",
+        "lat": False,
+        "lon": False
+    },
+    projection="natural earth",
+    title="Cheapest Destination Prices by Cabin"
+)
+
+map_fig.update_geos(
+    showcountries=True,
+    showcoastlines=True,
+    showland=True,
+    fitbounds="locations"
+)
+
+st.plotly_chart(map_fig, use_container_width=True)
+
 st.subheader("🤖 AI Destination Finder")
 
 business_under_50k = filtered[
