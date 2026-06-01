@@ -7,6 +7,9 @@ import plotly.express as px
 CSV_FILE = "flight_results.csv"
 AIRPORTS_FILE = "airports.dat"
 
+RECENT_DAYS_FOR_AI = 14
+MIN_VALID_BUSINESS_PRICE = 15000
+
 PREMIUM_AIRLINES = [
     "Air France", "KLM", "Lufthansa", "British Airways",
     "Iberia", "ANA", "JAL", "Emirates", "Qatar",
@@ -42,7 +45,8 @@ def load_airport_database():
     )
 
     airports = airports.dropna(subset=["iata", "lat", "lon"])
-    airports = airports[airports["iata"].astype(str).str.len() == 3]
+    airports["iata"] = airports["iata"].astype(str).str.strip().str.upper()
+    airports = airports[airports["iata"].str.len() == 3]
 
     return airports[["iata", "name", "city", "country", "lat", "lon"]]
 
@@ -65,6 +69,15 @@ if df.empty:
 df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
 df["lowest_price_mxn"] = pd.to_numeric(df["lowest_price_mxn"], errors="coerce")
 df["trip_length_days"] = pd.to_numeric(df["trip_length_days"], errors="coerce")
+
+df = df.dropna(subset=["timestamp", "lowest_price_mxn"])
+
+df = df[
+    ~(
+        (df["cabin_class"] == "business")
+        & (df["lowest_price_mxn"] < MIN_VALID_BUSINESS_PRICE)
+    )
+].copy()
 
 latest_scan_time = df["timestamp"].max()
 
@@ -369,6 +382,14 @@ def explain_deal(row):
 filtered["deal_score"] = filtered.apply(deal_score, axis=1)
 filtered["deal_explanation"] = filtered.apply(explain_deal, axis=1)
 
+latest_timestamp = filtered["timestamp"].max()
+recent_cutoff = latest_timestamp - pd.Timedelta(days=RECENT_DAYS_FOR_AI)
+
+recent_filtered = filtered[filtered["timestamp"] >= recent_cutoff].copy()
+
+if recent_filtered.empty:
+    recent_filtered = filtered.copy()
+
 
 def price_trend_signal(group):
     group = group.sort_values("timestamp")
@@ -394,64 +415,75 @@ st.subheader("📌 Summary")
 
 col1, col2, col3, col4 = st.columns(4)
 
-col1.metric("Cheapest Price", f"MX${filtered['lowest_price_mxn'].min():,.0f}")
-col2.metric("Average Price", f"MX${filtered['lowest_price_mxn'].mean():,.0f}")
-col3.metric("Search Results", len(filtered))
-col4.metric("Destinations", filtered["destination"].nunique())
+col1.metric("Cheapest Price", f"MX${recent_filtered['lowest_price_mxn'].min():,.0f}")
+col2.metric("Average Price", f"MX${recent_filtered['lowest_price_mxn'].mean():,.0f}")
+col3.metric("Recent Results", len(recent_filtered))
+col4.metric("Destinations", recent_filtered["destination"].nunique())
+
+st.caption(f"AI cards and summary use the latest {RECENT_DAYS_FOR_AI} days of scanner data.")
 
 st.subheader("🤖 AI Destination Finder")
 
-business_under_50k = filtered[
-    (filtered["cabin_class"] == "business") &
-    (filtered["lowest_price_mxn"] <= 50000)
-].sort_values("lowest_price_mxn")
+business_under_50k = recent_filtered[
+    (recent_filtered["cabin_class"] == "business") &
+    (recent_filtered["lowest_price_mxn"] <= 50000)
+].sort_values(["timestamp", "lowest_price_mxn"], ascending=[False, True])
 
-nonstop_deals = filtered[
-    filtered["stops"] == "Nonstop"
-].sort_values("lowest_price_mxn")
+nonstop_deals = recent_filtered[
+    recent_filtered["stops"] == "Nonstop"
+].sort_values(["timestamp", "lowest_price_mxn"], ascending=[False, True])
 
-best_overall = filtered.sort_values("deal_score", ascending=False)
+best_overall = recent_filtered.sort_values(
+    ["timestamp", "deal_score"],
+    ascending=[False, False]
+)
 
 col_a, col_b, col_c = st.columns(3)
 
 with col_a:
     st.markdown("### 💼 Best Business Under MX$50k")
     if business_under_50k.empty:
-        st.info("No business class deals under MX$50k found.")
+        st.info("No recent business class deals under MX$50k found.")
     else:
         deal = business_under_50k.iloc[0]
         st.success(
             f"{deal['origin']} → {deal['destination']}\n\n"
             f"MX${deal['lowest_price_mxn']:,.0f}\n\n"
             f"{deal['departure_date']} to {deal['return_date']}\n\n"
-            f"{deal['airline']} | {deal['stops']} | {deal['duration']}"
+            f"{deal['airline']} | {deal['stops']} | {deal['duration']}\n\n"
+            f"Scanned: {deal['timestamp'].strftime('%Y-%m-%d %H:%M')}"
         )
         st.link_button("Open Google Flights", deal["url"])
 
 with col_b:
     st.markdown("### 🛫 Best Nonstop Deal")
     if nonstop_deals.empty:
-        st.info("No nonstop deals found.")
+        st.info("No recent nonstop deals found.")
     else:
         deal = nonstop_deals.iloc[0]
         st.success(
             f"{deal['origin']} → {deal['destination']}\n\n"
             f"MX${deal['lowest_price_mxn']:,.0f}\n\n"
             f"{deal['departure_date']} to {deal['return_date']}\n\n"
-            f"{deal['cabin_class'].title()} | {deal['airline']} | {deal['duration']}"
+            f"{deal['cabin_class'].title()} | {deal['airline']} | {deal['duration']}\n\n"
+            f"Scanned: {deal['timestamp'].strftime('%Y-%m-%d %H:%M')}"
         )
         st.link_button("Open Google Flights", deal["url"])
 
 with col_c:
     st.markdown("### 🏆 Best Overall Deal")
-    deal = best_overall.iloc[0]
-    st.success(
-        f"{deal['origin']} → {deal['destination']}\n\n"
-        f"Score: {deal['deal_score']}\n\n"
-        f"MX${deal['lowest_price_mxn']:,.0f}\n\n"
-        f"{deal['cabin_class'].title()} | {deal['airline']} | {deal['stops']}"
-    )
-    st.link_button("Open Google Flights", deal["url"])
+    if best_overall.empty:
+        st.info("No recent deals found.")
+    else:
+        deal = best_overall.iloc[0]
+        st.success(
+            f"{deal['origin']} → {deal['destination']}\n\n"
+            f"Score: {deal['deal_score']}\n\n"
+            f"MX${deal['lowest_price_mxn']:,.0f}\n\n"
+            f"{deal['cabin_class'].title()} | {deal['airline']} | {deal['stops']}\n\n"
+            f"Scanned: {deal['timestamp'].strftime('%Y-%m-%d %H:%M')}"
+        )
+        st.link_button("Open Google Flights", deal["url"])
 
 st.subheader("🗺️ Destination Price Map")
 
@@ -459,11 +491,13 @@ if os.path.exists(AIRPORTS_FILE):
     airports = load_airport_database()
 
     map_data = (
-        filtered
+        recent_filtered
         .groupby(["destination", "cabin_class"])["lowest_price_mxn"]
         .min()
         .reset_index()
     )
+
+    map_data["destination"] = map_data["destination"].astype(str).str.strip().str.upper()
 
     map_data = map_data.merge(
         airports,
@@ -494,7 +528,7 @@ if os.path.exists(AIRPORTS_FILE):
                 "iata": False
             },
             projection="natural earth",
-            title="Cheapest Destination Prices by Cabin"
+            title="Recent Cheapest Destination Prices by Cabin"
         )
 
         map_fig.update_geos(
@@ -508,9 +542,9 @@ if os.path.exists(AIRPORTS_FILE):
 else:
     st.info("airports.dat not found. Add it to enable the destination map.")
 
-st.subheader("🏆 Top 15 Deals Ranked by AI Score")
+st.subheader("🏆 Top 15 Recent Deals Ranked by AI Score")
 
-top_ranked = filtered.sort_values("deal_score", ascending=False).head(15)
+top_ranked = recent_filtered.sort_values("deal_score", ascending=False).head(15)
 
 st.dataframe(
     top_ranked[
@@ -565,7 +599,6 @@ for keys, group in grouped_predictions:
     if pd.isna(volatility):
         volatility = 0
 
-    # Trend direction
     first_recent = recent_group["lowest_price_mxn"].iloc[0]
     last_recent = recent_group["lowest_price_mxn"].iloc[-1]
 
@@ -582,7 +615,6 @@ for keys, group in grouped_predictions:
     else:
         trend_direction = "➡️ Stable"
 
-    # Volatility label
     if volatility <= 1500:
         volatility_label = "Low"
     elif volatility <= 5000:
@@ -590,7 +622,6 @@ for keys, group in grouped_predictions:
     else:
         volatility_label = "High"
 
-    # Confidence
     observations = len(group)
 
     if observations >= 10 and volatility_label == "Low":
@@ -600,7 +631,6 @@ for keys, group in grouped_predictions:
     else:
         confidence = "Low"
 
-    # Smart prediction signal
     if (
         latest_price <= lowest_price * 1.03
         and trend_direction == "📉 Falling"
@@ -686,7 +716,7 @@ st.dataframe(
 st.subheader("🔥 Price Heat Map by Route & Cabin")
 
 heatmap_data = (
-    filtered
+    recent_filtered
     .groupby(["origin", "destination", "cabin_class"])["lowest_price_mxn"]
     .min()
     .reset_index()
@@ -709,7 +739,7 @@ heatmap_fig = px.imshow(
     text_auto=True,
     aspect="auto",
     color_continuous_scale="RdYlGn_r",
-    title="Lowest Price by Route & Cabin (MXN)"
+    title="Recent Lowest Price by Route & Cabin (MXN)"
 )
 
 st.plotly_chart(heatmap_fig, use_container_width=True)
@@ -717,7 +747,7 @@ st.plotly_chart(heatmap_fig, use_container_width=True)
 st.subheader("💺 Economy vs Business Comparison")
 
 comparison = (
-    filtered
+    recent_filtered
     .groupby(["destination", "cabin_class"])["lowest_price_mxn"]
     .min()
     .reset_index()
@@ -729,7 +759,7 @@ comparison_chart = px.bar(
     y="lowest_price_mxn",
     color="cabin_class",
     barmode="group",
-    title="Cheapest Price by Destination & Cabin",
+    title="Recent Cheapest Price by Destination & Cabin",
     text_auto=True
 )
 
@@ -753,7 +783,7 @@ price_trend_chart = px.line(
         "duration"
     ],
     markers=True,
-    title="Price Trend Over Time"
+    title="Full Historical Price Trend Over Time"
 )
 
 st.plotly_chart(price_trend_chart, use_container_width=True)
@@ -761,7 +791,7 @@ st.plotly_chart(price_trend_chart, use_container_width=True)
 st.subheader("✈️ Interactive Airline Comparison")
 
 airline_comparison = (
-    filtered
+    recent_filtered
     .groupby(["airline", "cabin_class"])["lowest_price_mxn"]
     .min()
     .reset_index()
@@ -773,7 +803,7 @@ airline_chart = px.bar(
     y="lowest_price_mxn",
     color="cabin_class",
     barmode="group",
-    title="Cheapest Price by Airline",
+    title="Recent Cheapest Price by Airline",
     text_auto=True
 )
 
@@ -782,7 +812,7 @@ st.plotly_chart(airline_chart, use_container_width=True)
 st.subheader("🛑 Interactive Stop Comparison")
 
 stop_comparison = (
-    filtered
+    recent_filtered
     .groupby(["stops", "cabin_class"])["lowest_price_mxn"]
     .min()
     .reset_index()
@@ -794,7 +824,7 @@ stop_chart = px.bar(
     y="lowest_price_mxn",
     color="cabin_class",
     barmode="group",
-    title="Cheapest Price by Stops",
+    title="Recent Cheapest Price by Stops",
     text_auto=True
 )
 
@@ -802,13 +832,13 @@ st.plotly_chart(stop_chart, use_container_width=True)
 
 st.subheader("📅 Cheapest Weekday to Depart")
 
-filtered["departure_weekday"] = pd.to_datetime(
-    filtered["departure_date"],
+recent_filtered["departure_weekday"] = pd.to_datetime(
+    recent_filtered["departure_date"],
     errors="coerce"
 ).dt.day_name()
 
 weekday_prices = (
-    filtered
+    recent_filtered
     .groupby(["departure_weekday", "cabin_class"])["lowest_price_mxn"]
     .min()
     .reset_index()
@@ -828,7 +858,7 @@ weekday_chart = px.bar(
     y="lowest_price_mxn",
     color="cabin_class",
     barmode="group",
-    title="Cheapest Weekday to Depart",
+    title="Recent Cheapest Weekday to Depart",
     text_auto=True
 )
 
