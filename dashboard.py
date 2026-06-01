@@ -1,5 +1,4 @@
 import os
-import pytz
 import pandas as pd
 import streamlit as st
 import plotly.express as px
@@ -8,6 +7,7 @@ CSV_FILE = "flight_results.csv"
 AIRPORTS_FILE = "airports.dat"
 
 RECENT_DAYS_FOR_AI = 14
+MIN_VALID_ECONOMY_PRICE = 10000
 MIN_VALID_BUSINESS_PRICE = 15000
 
 PREMIUM_AIRLINES = [
@@ -76,6 +76,13 @@ df = df[
     ~(
         (df["cabin_class"] == "business")
         & (df["lowest_price_mxn"] < MIN_VALID_BUSINESS_PRICE)
+    )
+].copy()
+
+df = df[
+    ~(
+        (df["cabin_class"] == "economy")
+        & (df["lowest_price_mxn"] < MIN_VALID_ECONOMY_PRICE)
     )
 ].copy()
 
@@ -389,26 +396,6 @@ recent_filtered = filtered[filtered["timestamp"] >= recent_cutoff].copy()
 
 if recent_filtered.empty:
     recent_filtered = filtered.copy()
-
-
-def price_trend_signal(group):
-    group = group.sort_values("timestamp")
-
-    if len(group) < 3:
-        return "Not enough data"
-
-    latest_price = group["lowest_price_mxn"].iloc[-1]
-    average_price = group["lowest_price_mxn"].mean()
-    min_price = group["lowest_price_mxn"].min()
-
-    if latest_price <= min_price * 1.03:
-        return "🔥 Buy now - near lowest price"
-    elif latest_price <= average_price * 0.90:
-        return "✅ Good - below average"
-    elif latest_price >= average_price * 1.10:
-        return "⏳ Wait - above average"
-    else:
-        return "Stable"
 
 
 st.subheader("📌 Summary")
